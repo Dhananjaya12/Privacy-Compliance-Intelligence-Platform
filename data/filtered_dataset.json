@@ -1,0 +1,229 @@
+[
+  {
+    "id": 5238,
+    "question": "How does incorporating causal analysis principles impact the trade-off between minimal edits and narrative coherence in counterfactual story generation?",
+    "answer": "Causal analysis helps identify invariant events that should be preserved and variant events that need modification, leading to more targeted edits. This is demonstrated by EduCat's superior performance in balancing minimal edits (BLEU score) with coherence (EntScore) compared to baselines that either over-edit or fail to maintain logical consistency.",
+    "support": [
+      "2112.05417",
+      "1909.04076"
+    ]
+  },
+  {
+    "id": 912,
+    "question": "How does the inclusion of review information impact the performance metrics compared to using question-answer pairs alone in e-commerce QA systems?",
+    "answer": "Review information significantly improves performance - RAHP model incorporating reviews achieved superior performance with PR-AUC improvements up to 12.15% over existing systems. Review information helps validate answer quality through opinion coherence and provides additional context beyond direct QA pairs.",
+    "support": [
+      "2104.02947",
+      "1904.02232"
+    ]
+  },
+  {
+    "id": 204,
+    "question": "How do the papers address the challenge of bridging large modality gaps when working with unpaired data?",
+    "answer": "Both papers use feature space transformations and discriminators to bridge modality gaps. For code-text pairs, transformers T_v\u2192c and T_c\u2192v map between code and text feature spaces, while for image-caption pairs, CNN and LSTM encoders map images and text to a shared semantic space. The discriminators are trained to distinguish real vs synthetic pairs in these feature spaces rather than raw input spaces.",
+    "support": [
+      "2002.10198",
+      "1909.02201"
+    ]
+  },
+  {
+    "id": 6074,
+    "question": "What is the relationship between the distance of relevant text segments and the effectiveness of transformer-based models in capturing their semantic connections?",
+    "answer": "As the distance between related text segments increases, transformer models show decreased ability to capture their semantic connections. This is demonstrated in both bridging anaphora resolution, where attention signals weaken with increased sentence distance between anaphors and antecedents, and in query-focused summarization, where models perform better when relevant content appears closer to the query-focused segments. The effect is particularly pronounced in higher transformer layers, which are primarily responsible for capturing long-range semantic relationships.",
+    "support": [
+      "2104.09400",
+      "2103.01863"
+    ]
+  },
+  {
+    "id": 2253,
+    "question": "What impact does the quality of opponent modeling have on overall environment reconstruction performance?",
+    "answer": "The accuracy of opponent models significantly affects environment reconstruction quality through both direct and compounding effects. Poor opponent models lead to cascading errors in multi-step predictions as inaccurate predictions of one agent's behavior affect the predicted responses of other agents. Studies show that adaptive schemes that limit the influence of less accurate opponent models while leveraging more accurate ones can improve overall reconstruction performance.",
+    "support": [
+      "2303.17984",
+      "1805.10000"
+    ]
+  },
+  {
+    "id": 2006,
+    "question": "How does the absence of token-level annotations affect the architectural choices and performance in zero-shot sequence labeling approaches?",
+    "answer": "Without token-level annotations, models must rely on sentence-level objectives combined with attention or copying mechanisms. The attention-based approach achieves 93% of supervised performance by using modified attention weights as pseudo token-labels and optimizing additional objectives to constrain attention scores, while the copying-based approach maintains competitive performance by leveraging nearest neighbor examples and achieving strong transfer capabilities across different label sets. Both approaches demonstrate that effective sequence labeling is possible without token supervision, though they make different architectural trade-offs - attention-based methods focus on interpretable token-level predictions while copying methods prioritize transfer learning capabilities.",
+    "support": [
+      "1805.02214",
+      "1906.04225"
+    ]
+  },
+  {
+    "id": 1828,
+    "question": "How does the acceptance rate of automated suggestions change as annotators gain more experience with the task?",
+    "answer": "For expert annotators, acceptance rates remain stable at around 56% even with increased experience. For non-experts, the rates vary significantly by individual - some show increasing acceptance (up to 73%) while others become more selective. This indicates expertise level impacts how annotators adapt to and trust suggestions over time.",
+    "support": [
+      "2004.14299",
+      "2105.12980"
+    ]
+  },
+  {
+    "id": 1143,
+    "question": "What are the key differences in how multilingual datasets handle emotional content versus general multimodal information?",
+    "answer": "While MLM focuses on factual relationships across languages and modalities without emotional context, ArtELingo specifically captures emotional variations across cultures, showing that Arabic and English speakers share more emotional interpretations compared to Chinese speakers, and demonstrates how cultural backgrounds influence emotional perception of visual content.",
+    "support": [
+      "2211.10780",
+      "2008.06376"
+    ]
+  },
+  {
+    "id": 6033,
+    "question": "Under what conditions can intervention costs be reduced below the general 2-approximation bound for ancestral graph recovery?",
+    "answer": "The intervention costs can achieve a (1+\u03b5)-approximation for any 0<\u03b5\u22641 when the number of interventions m is \u03a9(log n) and the ratio between maximum and minimum intervention costs (c_max) is bounded by O(\u03b5n/log n), using an adaptation of the Kruskal-Katona theorem approach.",
+    "support": [
+      "1810.11867",
+      "2005.11736"
+    ]
+  },
+  {
+    "id": 839,
+    "question": "How do these methods address the challenge of maintaining appropriate supervisory signals when mixing multiple input images?",
+    "answer": "The methods use different strategies: Co-Mixup optimizes for maximum saliency while ensuring diversity among mixup examples through a submodular-supermodular objective. GuidedMixup uses pixel-wise mixing ratios based on saliency maps to preserve important regions from each input. SaliencyMix ensures supervisory signal quality by selecting patches from peak salient regions and mixing labels proportionally to patch sizes.",
+    "support": [
+      "2306.16612",
+      "2102.03065",
+      "2006.01791"
+    ]
+  },
+  {
+    "id": 5543,
+    "question": "How does the estimation error vary when computing Jaccard similarity for streaming sets with high similarity values?",
+    "answer": "MaxLogHash exhibits very small bias and no systematic biases for high similarities, while HyperMinHash with r=1 shows significant bias that increases from -0.06 to -0.089 as similarity increases from 0.80 to 0.99. MaxLogHash achieves similar accuracy to MinHash while reducing memory usage by 5.4x.",
+    "support": [
+      "1905.08977",
+      "2002.00413"
+    ]
+  },
+  {
+    "id": 6067,
+    "question": "How does the soft clustering mechanism in internal discretization differ fundamentally from traditional bottom-up plane detection approaches?",
+    "answer": "While traditional bottom-up approaches first extract geometric primitives (lines, corners, patches) and then group them using statistical techniques like RANSAC or MRF, internal discretization learns to partition the feature space through input-dependent soft clustering using attention mechanisms. This allows the model to discover meaningful patterns directly from data without relying on hand-crafted geometric features or explicit plane assumptions, making it more robust to challenging scenarios with poorly textured surfaces or non-planar objects.",
+    "support": [
+      "1902.09777",
+      "2304.06334"
+    ]
+  },
+  {
+    "id": 4467,
+    "question": "How does the introduction of low-rank conditional probability tables affect the sample complexity bounds compared to local Markov boundary search methods?",
+    "answer": "The low-rank CPT approach achieves O(max(nk\u00b3log\u2074k, nk\u00b3log(1/\u03b4))) query complexity where k is the Markov blanket size, while local Markov boundary search requires O(d\u00b30pt log d) samples where d is dimension and 0pt is DAG depth. The low-rank assumption enables more efficient learning by exploiting structure in the CPTs, though it makes stronger assumptions about the underlying distribution compared to the local search method which only requires basic probabilistic properties like conditional independence.",
+    "support": [
+      "2110.06082",
+      "1905.12552"
+    ]
+  },
+  {
+    "id": 712,
+    "question": "How do neural dynamic policies (NDPs) handle the temporal resolution challenge compared to traditional Monte Carlo methods?",
+    "answer": "NDPs can operate at much higher frequencies (0.5-5KHz) than environment simulation (100Hz) by embedding dynamical structure and allowing dense sampling at test time, while Monte Carlo methods face an explicit trade-off between sampling frequency and number of trajectories under fixed budget.",
+    "support": [
+      "2212.08949",
+      "2012.02788"
+    ]
+  },
+  {
+    "id": 4837,
+    "question": "How does the trade-off between accuracy and ReLU count vary across different optimization approaches for private inference?",
+    "answer": "Stochastic ReLU approximation (Circa) achieves 3x speedup with minimal accuracy impact by introducing controlled faults. Architecture search (CryptoNAS) provides 2.2x speedup but with 9% accuracy drop at 86k ReLUs. Sensitivity-based allocation (SENet) achieves better accuracy-ReLU trade-off with only 0.5-2.38% accuracy drop while reducing ReLUs by up to 9.6x.",
+    "support": [
+      "2106.08475",
+      "2006.08733",
+      "2301.09254"
+    ]
+  },
+  {
+    "id": 3456,
+    "question": "How does column-wise normalization of weight matrices differ from full matrix normalization in terms of its effect on gradient flow and training dynamics?",
+    "answer": "Column-wise normalization reduces correlations between constraints by allowing each column to independently saturate its norm bound without impacting other columns, while full matrix normalization creates dependencies between all weights. This independence leads to better training results in practice for fully connected architectures, though it may not be suitable for other architectures like convolutional networks.",
+    "support": [
+      "1906.02341",
+      "2307.07512"
+    ]
+  },
+  {
+    "id": 260,
+    "question": "What are the key tradeoffs between privacy preservation and fairness measurement accuracy in these approaches?",
+    "answer": "The weak proxy approach deliberately uses inaccurate proxies to protect privacy while still achieving reliable fairness measurements through calibration. In contrast, tier balancing focuses on modeling the true underlying factors without explicit privacy considerations, potentially allowing more accurate fairness assessment but with greater privacy risks.",
+    "support": [
+      "2210.03175",
+      "2301.08987"
+    ]
+  },
+  {
+    "id": 244,
+    "question": "What are the relative advantages of rapid learning versus feature reuse approaches in speech recognition meta-learning?",
+    "answer": "Rapid learning approaches like MAML and meta-transfer learning enable more flexible adaptation by updating all parameters but require more computation. Feature reuse approaches like ANIL (used in one-shot learning) are more computationally efficient by only updating task-specific layers, but may be less adaptable since feature extraction layers remain fixed. The choice depends on the specific requirements of the task and available computational resources.",
+    "support": [
+      "2004.14228",
+      "2011.10233"
+    ]
+  },
+  {
+    "id": 767,
+    "question": "What insights do gradient-based analyses reveal about how BiLSTM representations capture syntactic relationships in dependency parsing?",
+    "answer": "Gradient-based analyses show that BiLSTM representations are influenced by both linear distance and structural relationships. Words that are structurally close (heads, children, siblings) have higher impact on a token's representation even when linearly distant. For transition-based parsing, heads and grandparents have ~5% impact while children/siblings have moderate impact. In graph-based parsing, heads have stronger impact for distant words but weaker impact for adjacent words. This demonstrates BiLSTMs learn non-trivial syntactic relationships when trained with dependency parsers.",
+    "support": [
+      "1902.09781",
+      "1905.12676"
+    ]
+  },
+  {
+    "id": 1791,
+    "question": "What is the relationship between network width requirements and pruning performance when comparing traditional weight-optimization versus pruning-based training approaches?",
+    "answer": "Pruning-based approaches theoretically require logarithmically wider networks than weight-optimization to achieve the same accuracy. However, techniques like iterative randomization can reduce this width requirement to match weight-optimization (up to constant factors), while still maintaining comparable accuracy through pruning rather than continuous optimization.",
+    "support": [
+      "2106.09269",
+      "2308.04637"
+    ]
+  },
+  {
+    "id": 1905,
+    "question": "How does the interpretation of high CKA similarity values between neural network representations differ when considering representation quality versus feature usefulness?",
+    "answer": "While high CKA similarity values can indicate similar representational structure between networks, they do not necessarily imply similar quality or usefulness of learned features. Early layers of networks trained on random labels show high CKA similarity with properly trained networks despite having drastically different convolution filters and less useful features as measured by linear probes. This suggests CKA primarily captures structural patterns rather than functional similarity of representations.",
+    "support": [
+      "2010.16402",
+      "2210.16156"
+    ]
+  },
+  {
+    "id": 4139,
+    "question": "What is the impact of using meta-learning versus traditional architecture search methods on computational efficiency for handling multiple datasets?",
+    "answer": "Meta-learning dramatically reduces computational costs from O(N) to O(1) when searching architectures for multiple datasets, as it eliminates the need to retrain models for each new dataset. Traditional methods require repeated training for each dataset, taking several GPU hours per dataset, while meta-learned models can generate architectures within seconds through amortized inference, achieving up to 12,169x faster search speeds while maintaining competitive performance.",
+    "support": [
+      "2107.00860",
+      "1812.09584"
+    ]
+  },
+  {
+    "id": 4931,
+    "question": "What fundamental limitation of feature concatenation for multi-view fusion necessitates graph-based approaches?",
+    "answer": "Feature concatenation cannot generalize well to different camera configurations by design and ignores the geometric relationships between views. Graph-based approaches overcome this by explicitly modeling view relationships through learnable message passing, enabling flexible fusion of features from arbitrary numbers of views while preserving geometric constraints.",
+    "support": [
+      "2109.05885",
+      "2005.04551"
+    ]
+  },
+  {
+    "id": 217,
+    "question": "How do these domain-specific datasets address the challenge of temporal evolution in their respective fields?",
+    "answer": "Both datasets explicitly handle temporal evolution but in different ways - HUPD tracks patent acceptance criteria changes over time through cross-year evaluations showing performance deterioration in faster-moving fields, while Qasper preserves temporal context by maintaining the original versions of papers and annotations, allowing analysis of how research questions and methodologies evolve. Both approaches enable studying concept drift and domain shifts over time.",
+    "support": [
+      "2207.04043",
+      "2105.03011"
+    ]
+  },
+  {
+    "id": 4597,
+    "question": "Why does minimizing the VICReg loss function with similarity graph G(sup) recover the one-hot encoding of labels up to negligible symmetries?",
+    "answer": "This occurs because VICReg's loss combines variance-invariance-covariance terms that, when applied to the supervised similarity graph G(sup), force the learned representations to match the spectral decomposition of the graph Laplacian. Since G(sup) is constructed from label relationships, its spectral decomposition recovers the one-hot label encoding up to orthogonal transformations.",
+    "support": [
+      "2105.04906",
+      "2303.15256"
+    ]
+  }
+]
