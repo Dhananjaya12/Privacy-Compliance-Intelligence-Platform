@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pdf-rag-api
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pdf-rag-api
+  template:
+    metadata:
+      labels:
+        app: pdf-rag-api
+    spec:
+      containers:
+        - name: api
+          image: your-registry/pdf-rag-agent:latest  # update this
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: pdf-rag-secrets
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "1"
+            limits:
+              memory: "16Gi"
+              cpu: "4"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: pdf-rag-pvc

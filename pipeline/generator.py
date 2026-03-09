@@ -1,3 +1,4 @@
+import os
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM, pipeline
 from transformers import BitsAndBytesConfig
@@ -10,12 +11,13 @@ class LLMGenerator:
         self,
         llm_model_name="meta-llama/Llama-3-8B-Instruct",
         device="cuda",
-        max_new_tokens=300,
+        config = {}
     ):
         self.llm_model_name = llm_model_name
         self.device = device
-        self.max_new_tokens = max_new_tokens
         self._llm = None
+        self.api_key = os.getenv("HUGGING_FACE_API")
+        self.config = config
 
     def _get_llm(self) -> HuggingFacePipeline:
         if self._llm is None:
@@ -26,11 +28,12 @@ class LLMGenerator:
                 bnb_4bit_compute_dtype=torch.bfloat16,
             )
 
-            tokenizer = AutoTokenizer.from_pretrained(self.llm_model_name)
+            tokenizer = AutoTokenizer.from_pretrained(self.llm_model_name, token = self.api_key)
 
-            if self.llm_model_name == "meta-llama/Llama-3-8B-Instruct":
+            if self.llm_model_name == "meta-llama/Llama-3.1-8B-Instruct":
                 model = AutoModelForCausalLM.from_pretrained(
                     self.llm_model_name,
+                    token = self.api_key,
                     quantization_config=bnb_config,
                     device_map="auto" if self.device != "cpu" else None,
                 )
@@ -38,36 +41,47 @@ class LLMGenerator:
             elif self.llm_model_name == "google/flan-t5-small":
                 model = AutoModelForSeq2SeqLM.from_pretrained(
                     self.llm_model_name,
+                    token = self.api_key,
                     quantization_config=bnb_config,
                     device_map="auto" if self.device != "cpu" else None,
                 )
 
             hf_pipe = pipeline(
-                task="text-generation",
-                model=model,
-                tokenizer=tokenizer,
-                max_new_tokens=self.max_new_tokens,
-                do_sample=False,   # deterministic for evaluation
-                temperature=0.0,
-                return_full_text=False,
-            )
+            task="text-generation",
+            model=model,
+            tokenizer=tokenizer,
+            do_sample=True,          # IMPORTANT
+            temperature=self.config['llm']['temperature'],
+            repetition_penalty=1.1,
+            max_new_tokens=self.config['llm']['max_new_tokens'],
+            return_full_text=False,
+            truncation=True,
+        )
 
             self._llm = HuggingFacePipeline(pipeline=hf_pipe)
 
         return self._llm
-    
-    def generate_answer(
-        self,
-        docs,
-        prompt,
-        question,
-    ):
-        """
-        Generate an answer for a single question using RAG.
-        """
 
+    def generate_answer(
+    self,
+    docs,
+    prompt,
+    question,
+    mode="answer",   # <-- NEW
+):
         llm = self._get_llm()
-        response = llm.invoke(prompt)
+
+        if mode == "grade":
+            response = llm.pipeline(
+                prompt,
+                max_new_tokens=2,
+                do_sample=False,
+                temperature=0.0,
+                top_p=1,
+                return_full_text=False,
+            )[0]["generated_text"].strip()
+        else:
+            response = llm.invoke(prompt)
 
         return {
             "question": question,

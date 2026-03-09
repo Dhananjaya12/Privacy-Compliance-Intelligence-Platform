@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pdf-rag-api-ingress
+  namespace: pdf-rag
+  labels:
+    app.kubernetes.io/name: pdf-rag-agent
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"     # allow large PDF uploads
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"   # long inference timeout
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    # Uncomment for TLS via cert-manager:
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx       # ← update to your ingress class
+  # Uncomment for TLS:
+  # tls:
+  #   - hosts:
+  #       - pdf-rag.your-domain.com
+  #     secretName: pdf-rag-tls
+  rules:
+    - host: pdf-rag.your-domain.com    # ← update to your domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pdf-rag-api
+                port:
+                  name: http

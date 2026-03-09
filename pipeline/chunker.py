@@ -7,20 +7,20 @@ from langchain_text_splitters import TokenTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 
 from langchain_community.llms import HuggingFacePipeline
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline, AutoModelForSeq2SeqLM
 
+from transformers import BitsAndBytesConfig
+import torch
 import json
 from tqdm import tqdm
+import os
 
 class ChunkingManager:
-    """
-    Efficient chunking manager with lazy-loaded components.
-    Heavy models are only loaded if the corresponding strategy is used.
-    """
-
     def __init__(
         self,
         embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
         llm_model: str = "google/flan-t5-small",#"meta-llama/Llama-3.1-8B-Instruct", #"meta-llama/Llama-2-7b-chat-hf", 
+        config: dict = {},
         device: str = "cpu"
     ):
         self.embedding_model_name = embedding_model
@@ -29,6 +29,8 @@ class ChunkingManager:
 
         self._embeddings: Optional[HuggingFaceEmbeddings] = None
         self._llm: Optional[HuggingFacePipeline] = None
+        self.config = config
+        self.api_key = os.getenv("HUGGING_FACE_API")
 
     def _get_embeddings(self) -> HuggingFaceEmbeddings:
         if self._embeddings is None:
@@ -36,6 +38,39 @@ class ChunkingManager:
                 model_name=self.embedding_model_name
             )
         return self._embeddings
+
+    def _get_llm(self) -> HuggingFacePipeline:
+        if self._llm is None:
+            bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.bfloat16,
+)
+            
+            tokenizer = AutoTokenizer.from_pretrained(self.llm_model_name, token = self.api_key)
+            model = AutoModelForCausalLM.from_pretrained(
+                self.llm_model_name,
+                token = self.api_key,
+                quantization_config=bnb_config,
+                device_map="auto" if self.device != "cpu" else None
+            )
+
+            llm_pipeline = pipeline(
+            task="text-generation",
+            model=model,
+            tokenizer=tokenizer,
+            do_sample=True,          # IMPORTANT
+            temperature=self.config['llm']['temperature'],
+            repetition_penalty=1.1,
+            max_new_tokens=self.config['llm']['max_new_tokens'],
+            return_full_text=False,
+            truncation=True,
+        )
+        
+            self._llm = (llm_pipeline, tokenizer)
+
+        return self._llm
 
     def semantic_chunking(
     self,
@@ -159,7 +194,7 @@ class ChunkingManager:
             ]
 
         
-    def agentic_chunking(self, documents: List[Document], output_path, prompt_template, append: bool = True,) -> List[Document]:
+    def agentic_chunking(self, documents: List[Document], output_path, append: bool = True,) -> List[Document]:
         all_chunks = []
         mode = "a" if append else "w"
 
@@ -167,9 +202,8 @@ class ChunkingManager:
             for doc_idx, doc in enumerate(tqdm(documents, desc="Agentic chunking")):
                 # print('doc_idx, doc', doc_idx, doc)
                 # sections = self._llm_split_sections(doc.page_content, llm)
-                prompt = prompt_template.format(text=doc.page_content)
                 llm_pipeline, tokenizer = self._get_llm()
-                sections = self._llm_split_sections(doc.page_content, llm_pipeline, tokenizer, prompt)
+                sections = self._llm_split_sections(doc.page_content, llm_pipeline, tokenizer)
                 # print('sections', sections)
                 page_lines = [] 
                 page_chunks = []
@@ -199,7 +233,8 @@ class ChunkingManager:
                     all_chunks.extend(page_chunks)
         return all_chunks
     
-    def _llm_split_sections(self, text: str, llm_pipeline, tokenizer, prompt):
+    def _llm_split_sections(self, text: str, llm_pipeline, tokenizer):
+        prompt = self._build_agentic_prompt(text)
     
         formatted_prompt = tokenizer.apply_chat_template(
             prompt,

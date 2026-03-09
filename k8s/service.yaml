@@ -1,0 +1,20 @@
+# ─────────────────────────────────────────────────────────────────────────
+# Service
+# ─────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: pdf-rag-api
+  namespace: pdf-rag
+  labels:
+    app.kubernetes.io/name: pdf-rag-agent
+    app.kubernetes.io/component: api
+spec:
+  type: ClusterIP
+  selector:
+    app: pdf-rag-api
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8000
