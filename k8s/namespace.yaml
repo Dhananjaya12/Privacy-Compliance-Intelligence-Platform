@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: pdf-rag
-  labels:
-    app.kubernetes.io/name: pdf-rag-agent
-    app.kubernetes.io/managed-by: kubectl
