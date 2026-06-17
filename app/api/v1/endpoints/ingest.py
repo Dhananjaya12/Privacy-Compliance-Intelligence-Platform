@@ -36,6 +36,24 @@ def _get_rag_service(request: Request) -> RAGService:
     )
 
 
+@router.get("/policies", summary="List ingested policy documents")
+async def list_policies(request: Request):
+    """Return the policy-document registry used for audit targeting."""
+    retriever = getattr(request.app.state, "compliance_retriever", None)
+    if retriever is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Retriever not ready.",
+        )
+    try:
+        return {"policies": retriever.list_policy_documents()}
+    except Exception as exc:
+        logger.exception("Policy listing failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+        ) from exc
+
+
 @router.post(
     "/ingest",
     response_model=IngestResponse,

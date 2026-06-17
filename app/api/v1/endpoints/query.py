@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 
 from app.models.schemas import QueryRequest, QueryResponse
 from app.services.rag_service import RAGService
@@ -43,10 +44,27 @@ async def query_endpoint(
     service: RAGService = Depends(_get_rag_service),
 ):
     try:
-        return service.query(body.query)
+        return service.query(body.query, policy_document=body.policy_document)
     except Exception as exc:
         logger.exception("Error during query")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from exc
+
+
+@router.post(
+    "/query/stream",
+    summary="Query the compliance agent with streaming progress",
+    description="Like /query, but streams Server-Sent Events as each pipeline "
+                 "stage completes, followed by a final event with the full result.",
+)
+async def query_stream_endpoint(
+    body: QueryRequest,
+    service: RAGService = Depends(_get_rag_service),
+):
+    return StreamingResponse(
+        service.query_stream(body.query, policy_document=body.policy_document),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

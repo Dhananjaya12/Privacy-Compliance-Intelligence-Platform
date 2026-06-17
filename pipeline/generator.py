@@ -1,23 +1,38 @@
+from __future__ import annotations
+
 import os
+from typing import Any, Dict, List
+
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM, pipeline
-from transformers import BitsAndBytesConfig
 from langchain_community.llms import HuggingFacePipeline
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    pipeline,
+)
 
 
 class LLMGenerator:
+    """
+    Thin wrapper around a quantised HuggingFace causal LM.
+    Used for Phase 1 RAG generation and answer grading.
+
+    All compliance LLM calls (Phase 2) go through Azure OpenAI directly
+    in compliance_nodes.py and are not routed here.
+    """
 
     def __init__(
         self,
-        llm_model_name="meta-llama/Llama-3-8B-Instruct",
-        device="cuda",
-        config = {}
+        llm_model_name: str = "meta-llama/Llama-3.1-8B-Instruct",
+        device: str = "cpu",
+        config: dict = {},
     ):
         self.llm_model_name = llm_model_name
-        self.device = device
-        self._llm = None
-        self.api_key = os.getenv("HUGGING_FACE_API")
-        self.config = config
+        self.device         = device
+        self.config         = config
+        self.api_key        = os.getenv("HUGGING_FACE_API")
+        self._llm: HuggingFacePipeline | None = None
 
     def _get_llm(self) -> HuggingFacePipeline:
         if self._llm is None:
@@ -28,47 +43,45 @@ class LLMGenerator:
                 bnb_4bit_compute_dtype=torch.bfloat16,
             )
 
-            tokenizer = AutoTokenizer.from_pretrained(self.llm_model_name, token = self.api_key)
-
-            if self.llm_model_name == "meta-llama/Llama-3.1-8B-Instruct":
-                model = AutoModelForCausalLM.from_pretrained(
-                    self.llm_model_name,
-                    token = self.api_key,
-                    quantization_config=bnb_config,
-                    device_map="auto" if self.device != "cpu" else None,
-                )
-            
-            elif self.llm_model_name == "google/flan-t5-small":
-                model = AutoModelForSeq2SeqLM.from_pretrained(
-                    self.llm_model_name,
-                    token = self.api_key,
-                    quantization_config=bnb_config,
-                    device_map="auto" if self.device != "cpu" else None,
-                )
+            tokenizer = AutoTokenizer.from_pretrained(
+                self.llm_model_name, token=self.api_key
+            )
+            model = AutoModelForCausalLM.from_pretrained(
+                self.llm_model_name,
+                token=self.api_key,
+                quantization_config=bnb_config,
+                device_map="auto" if self.device != "cpu" else None,
+            )
 
             hf_pipe = pipeline(
-            task="text-generation",
-            model=model,
-            tokenizer=tokenizer,
-            do_sample=True,          # IMPORTANT
-            temperature=self.config['llm']['temperature'],
-            repetition_penalty=1.1,
-            max_new_tokens=self.config['llm']['max_new_tokens'],
-            return_full_text=False,
-            truncation=True,
-        )
+                task="text-generation",
+                model=model,
+                tokenizer=tokenizer,
+                do_sample=True,
+                temperature=self.config["llm"]["temperature"],
+                repetition_penalty=1.1,
+                max_new_tokens=self.config["llm"]["max_new_tokens"],
+                return_full_text=False,
+                truncation=True,
+            )
 
             self._llm = HuggingFacePipeline(pipeline=hf_pipe)
 
         return self._llm
 
     def generate_answer(
-    self,
-    docs,
-    prompt,
-    question,
-    mode="answer",   # <-- NEW
-):
+        self,
+        docs: List[Any],
+        prompt: str,
+        question: str,
+        mode: str = "answer",
+    ) -> Dict[str, Any]:
+        """
+        Generate a response from the local LLM.
+
+        mode="answer" — standard generation using invoke()
+        mode="grade"  — short numeric output (max 2 tokens, greedy)
+        """
         llm = self._get_llm()
 
         if mode == "grade":
@@ -84,10 +97,10 @@ class LLMGenerator:
             response = llm.invoke(prompt)
 
         return {
-            "question": question,
+            "question":        question,
             "generated_answer": response,
             "retrieved_papers": list(
-                {d.metadata.get("paper_id") for d in docs}
+                {d.metadata.get("paper_id") for d in docs if hasattr(d, "metadata")}
             ),
             "retrieved_chunks": docs,
         }
