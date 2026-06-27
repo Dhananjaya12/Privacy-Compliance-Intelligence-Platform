@@ -98,3 +98,5 @@ Thumbs.db
 # ==========================
 .claude/
 
+# Private demo notes
+DEMO_GUIDE.md

@@ -1,15 +1,11 @@
 // src/pages/Dashboard.tsx
 import { useEffect, useState } from 'react'
-import { healthReadyAPI, trendsAPI, conflictsAPI, TrendPoint, Conflict, API_TARGET } from '../lib/api'
+import { healthReadyAPI, conflictsAPI, Conflict, API_TARGET } from '../lib/api'
 import { AlertTriangle, CheckCircle, GitMerge } from 'lucide-react'
-import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-} from 'recharts'
 
 export default function Dashboard() {
   const [health, setHealth] = useState<{ status: string; pipeline_ready: boolean; version?: string } | null>(null)
   const [healthError, setHealthError] = useState<string | null>(null)
-  const [trends, setTrends] = useState<TrendPoint[]>([])
   const [conflicts, setConflicts] = useState<Conflict[]>([])
 
   useEffect(() => {
@@ -35,21 +31,12 @@ export default function Dashboard() {
     }
     poll()
 
-    trendsAPI().then(setTrends).catch(() => setTrends([]))
     conflictsAPI().then(setConflicts).catch(() => setConflicts([]))
 
     return () => { cancelled = true; clearTimeout(timer) }
   }, [])
 
   const ready = health?.pipeline_ready ?? false
-
-  const chartData = trends
-    .filter(p => p.compliance_score != null)
-    .map((p, i) => ({
-      idx: i + 1,
-      score: p.compliance_score,
-      label: p.start_time ? new Date(Number(p.start_time)).toLocaleDateString() : `#${i + 1}`,
-    }))
 
   return (
     <div>
@@ -84,26 +71,6 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Compliance trend */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div className="card-title">Compliance Score Trend</div>
-        {chartData.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '24px 0', textAlign: 'center' }}>
-            No audit runs yet. Run an audit to start tracking compliance over time.
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 4, left: -16 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
-              <Tooltip contentStyle={{ background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: 12 }} />
-              <Line type="monotone" dataKey="score" stroke="var(--accent)" strokeWidth={2} dot={{ r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
       {/* Cross-regulation conflicts */}
       {conflicts.length > 0 && (
         <div className="card" style={{ marginBottom: 20 }}>
@@ -131,9 +98,9 @@ export default function Dashboard() {
           <div className="card-title">How to run an audit</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {[
-              { step: '1', text: 'Go to Audit and upload a company privacy policy PDF' },
-              { step: '2', text: 'Ask a compliance question about the policy' },
-              { step: '3', text: 'Review the compliance score, gaps, and remediations' },
+              { step: '1', text: 'Go to Audit and upload a sample privacy policy PDF' },
+              { step: '2', text: 'Ask a general compliance question, then select a policy from the dropdown' },
+              { step: '3', text: 'Review the detected gaps and remediation checklist' },
               { step: '4', text: 'View past audits in History' },
             ].map(({ step, text }) => (
               <div key={step} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>

@@ -1,17 +1,15 @@
 // src/App.tsx
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { Shield, Search, BarChart2, GitBranch, History as HistoryIcon } from 'lucide-react'
+import { Shield, Search, BarChart2, History as HistoryIcon } from 'lucide-react'
 import Dashboard     from './pages/Dashboard'
 import Audit         from './pages/Audit'
 import History       from './pages/History'
-import GraphExplorer from './pages/GraphExplorer'
 import ErrorBoundary from './components/ErrorBoundary'
 import './index.css'
 
 const NAV = [
   { to: '/',            icon: BarChart2,   label: 'Dashboard'   },
   { to: '/audit',       icon: Search,      label: 'Audit'       },
-  { to: '/graph',       icon: GitBranch,   label: 'Graph'       },
   { to: '/history',     icon: HistoryIcon, label: 'History'     },
 ]
 
@@ -24,7 +22,6 @@ function MainContent() {
       <Routes>
         <Route path="/"            element={<Dashboard />} />
         <Route path="/audit"       element={<Audit />} />
-        <Route path="/graph"       element={<GraphExplorer />} />
         <Route path="/history"     element={<History />} />
       </Routes>
     </ErrorBoundary>

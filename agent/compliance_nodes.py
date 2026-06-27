@@ -319,13 +319,7 @@ JSON array:"""
         state["jurisdictions"] = jurisdictions
         elapsed = round((time.time() - node_start) * 1000)
         logger.info("[jurisdiction_detector] %s | %dms", jurisdictions, elapsed)
-        self._telemetry.logger.info(
-            "node_jurisdiction_detector",
-            extra={"custom_dimensions": {
-                "jurisdictions": json.dumps(jurisdictions),
-                "latency_ms": elapsed,
-            }},
-        )
+        self._telemetry.node("node_jurisdiction_detector", jurisdictions=json.dumps(jurisdictions), latency_ms=elapsed)
         return state
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -564,10 +558,7 @@ JSON array:"""
 
         elapsed = round((time.time() - node_start) * 1000)
         logger.info("[gap_analyzer] done | gaps=%d | %dms", len(all_gaps), elapsed)
-        self._telemetry.logger.info(
-            "node_gap_analyzer",
-            extra={"custom_dimensions": {"gaps_found": len(all_gaps), "latency_ms": elapsed}},
-        )
+        self._telemetry.node("node_gap_analyzer", gaps_found=len(all_gaps), latency_ms=elapsed)
         return state
 
     def _analyze_gaps_with_llm(
@@ -865,13 +856,11 @@ No markdown. Output only the JSON array."""
         elapsed = round((time.time() - node_start) * 1000)
         logger.info("[risk_scorer] compliance=%.1f/100 | %dms",
                     state["compliance_score"], elapsed)
-        self._telemetry.logger.info(
+        self._telemetry.node(
             "node_risk_scorer",
-            extra={"custom_dimensions": {
-                "compliance_score": state["compliance_score"],
-                "per_reg_compliance": json.dumps(state["per_reg_compliance"]),
-                "latency_ms": elapsed,
-            }},
+            compliance_score=state["compliance_score"],
+            per_reg_compliance=json.dumps(state["per_reg_compliance"]),
+            latency_ms=elapsed,
         )
         return state
 

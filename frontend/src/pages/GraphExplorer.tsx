@@ -4,8 +4,49 @@ import * as d3 from 'd3'
 import { graphAPI, GraphData } from '../lib/api'
 import { GitBranch, RefreshCw } from 'lucide-react'
 
-interface D3Node extends d3.SimulationNodeDatum { id: string; label: string }
+interface D3Node extends d3.SimulationNodeDatum { id: string; label: string; displayLabel: string; category: NodeCategory }
 interface D3Link extends d3.SimulationLinkDatum<D3Node> { type: string; description?: string }
+
+type NodeCategory = 'regulation' | 'requirement' | 'policy' | 'evidence' | 'risk' | 'recommendation'
+
+const CATEGORY_META: Record<NodeCategory, { label: string; color: string; radius: number }> = {
+  regulation: { label: 'Regulation / Framework', color: '#a78bfa', radius: 10 },
+  requirement: { label: 'Compliance Requirement', color: '#facc15', radius: 9 },
+  policy: { label: 'Policy Document', color: '#38bdf8', radius: 9 },
+  evidence: { label: 'Evidence / Clause', color: '#22d3ee', radius: 7 },
+  risk: { label: 'Gap / Risk', color: '#fb7185', radius: 10 },
+  recommendation: { label: 'Recommendation', color: '#fb923c', radius: 9 },
+}
+
+function isHashLike(value: string): boolean {
+  return /^[a-f0-9]{12,}$/i.test(value.replace(/[^a-f0-9]/gi, ''))
+}
+
+function cleanGraphLabel(raw: string): string {
+  const label = (raw || '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!label) return 'Compliance Evidence'
+  if (isHashLike(label)) return 'Policy Evidence'
+
+  const lower = label.toLowerCase()
+  if (lower.includes('gdpr')) return 'GDPR Requirement'
+  if (lower.includes('hipaa')) return 'HIPAA Requirement'
+  if (lower.includes('ccpa')) return 'CCPA Requirement'
+  if (lower.includes('nist')) return 'NIST Control'
+  if (lower.includes('gap') || lower.includes('missing')) return 'Compliance Gap'
+  if (lower.includes('recommend')) return 'Recommended Fix'
+
+  return label.length > 46 ? `${label.slice(0, 43)}...` : label
+}
+
+function categorizeNode(label: string): NodeCategory {
+  const lower = label.toLowerCase()
+  if (lower.includes('gap') || lower.includes('risk') || lower.includes('missing') || lower.includes('conflict')) return 'risk'
+  if (lower.includes('recommend') || lower.includes('remediation')) return 'recommendation'
+  if (lower.includes('policy') || lower.endsWith('.pdf')) return 'policy'
+  if (lower.includes('gdpr') || lower.includes('hipaa') || lower.includes('ccpa') || lower.includes('nist') || lower.includes('regulation')) return 'regulation'
+  if (lower.includes('requirement') || lower.includes('obligation') || lower.includes('control') || lower.includes('article')) return 'requirement'
+  return 'evidence'
+}
 
 export default function GraphExplorer() {
   const svgRef = useRef<SVGSVGElement | null>(null)
@@ -15,7 +56,7 @@ export default function GraphExplorer() {
 
   const load = () => {
     setLoading(true); setError(null)
-    graphAPI(200)
+    graphAPI(80)
       .then(d => {
         if (!d || !Array.isArray(d.nodes) || !Array.isArray(d.links)) {
           console.error('[GraphExplorer] unexpected /graph response:', d)
@@ -40,7 +81,23 @@ export default function GraphExplorer() {
       const width = svgRef.current.clientWidth || 900
       const height = 620
 
-      const nodes: D3Node[] = data.nodes.map(n => ({ ...n }))
+      const connectedIds = new Set<string>()
+      data.links.forEach(l => {
+        connectedIds.add(String(l.source))
+        connectedIds.add(String(l.target))
+      })
+
+      const nodes: D3Node[] = data.nodes
+        .filter(n => connectedIds.has(n.id))
+        .slice(0, 45)
+        .map(n => {
+          const displayLabel = cleanGraphLabel(n.label || n.id)
+          return {
+            ...n,
+            displayLabel,
+            category: categorizeNode(`${displayLabel} ${n.label || ''} ${n.id || ''}`),
+          }
+        })
       const nodeIds = new Set(nodes.map(n => n.id))
       // Drop edges that reference a node not present in `nodes` — d3.forceLink
       // throws synchronously if source/target can't be resolved.
@@ -59,13 +116,13 @@ export default function GraphExplorer() {
       )
 
       const sim = d3.forceSimulation<D3Node>(nodes)
-        .force('link', d3.forceLink<D3Node, D3Link>(links).id(d => d.id).distance(90))
-        .force('charge', d3.forceManyBody().strength(-220))
+        .force('link', d3.forceLink<D3Node, D3Link>(links).id(d => d.id).distance(130))
+        .force('charge', d3.forceManyBody().strength(-420))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collide', d3.forceCollide(22))
+        .force('collide', d3.forceCollide(42))
 
       const link = container.append('g').attr('stroke', '#666').attr('stroke-opacity', 0.5)
-        .selectAll('line').data(links).join('line').attr('stroke-width', 1.2)
+        .selectAll('line').data(links).join('line').attr('stroke-width', 1.6)
 
       link.append('title').text(d => d.type + (d.description ? ` — ${d.description}` : ''))
 
@@ -75,14 +132,15 @@ export default function GraphExplorer() {
 
       const node = container.append('g').attr('stroke', '#1a1a2e').attr('stroke-width', 1.5)
         .selectAll('circle').data(nodes).join('circle')
-        .attr('r', 7).attr('fill', '#42d4f4')
+        .attr('r', d => CATEGORY_META[d.category].radius)
+        .attr('fill', d => CATEGORY_META[d.category].color)
         .call(
           d3.drag<SVGCircleElement, D3Node>()
             .on('start', (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y })
             .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y })
             .on('end', (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null }) as any
         )
-      node.append('title').text(d => d.label)
+      node.append('title').text(d => `${CATEGORY_META[d.category].label}: ${d.label || d.id}`)
 
       const label = container.append('g')
         .selectAll('text').data(nodes).join('text')
@@ -109,7 +167,7 @@ export default function GraphExplorer() {
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <div className="page-title">Graph Explorer</div>
-          <div className="page-sub">Interactive view of the compliance knowledge graph (Neo4j)</div>
+          <div className="page-sub">Demo-friendly view of the compliance knowledge graph: frameworks, requirements, evidence, and risks</div>
         </div>
         <button className="btn btn-ghost" onClick={load} style={{ fontSize: 12 }}><RefreshCw size={12} /> Reload</button>
       </div>
@@ -126,7 +184,13 @@ export default function GraphExplorer() {
         ) : !data || data.nodes.length === 0 ? (
           <div className="empty-state"><GitBranch size={32} /> Graph is empty — build the KG first.</div>
         ) : (
-          <svg ref={svgRef} style={{ width: '100%', height: 620, background: '#1a1a2e', display: 'block' }} />
+          <>
+            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', fontSize: 12, color: 'var(--text-dim)' }}>
+              Showing a simplified graph for presentation: long chunk IDs are renamed as <strong style={{ color: 'var(--text)' }}>Policy Evidence</strong>,
+              and the graph is limited to the most connected nodes so the compliance story is easier to follow.
+            </div>
+            <svg ref={svgRef} style={{ width: '100%', height: 620, background: '#1a1a2e', display: 'block' }} />
+          </>
         )}
       </div>
 

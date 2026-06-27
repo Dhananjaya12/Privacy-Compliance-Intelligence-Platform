@@ -1,258 +1,263 @@
 # Privacy Compliance Intelligence Platform
 
-An AI-powered compliance auditing system that analyzes company privacy policies against regulatory frameworks like **GDPR, CCPA, HIPAA, and NIST** and surfaces actionable gaps, risk levels, and remediation steps. Built on a Neo4j Knowledge Graph, Azure AI Search, and a LangGraph multi-node agent pipeline with a React dashboard.
+A compliance-focused RAG application for auditing privacy policy PDFs against GDPR, CCPA, HIPAA, and NIST requirements.
 
----
+The project combines Spark-based PDF ingestion, Azure AI Search retrieval, a Neo4j regulation knowledge graph, an Azure OpenAI-compatible LLM, a LangGraph compliance workflow, and a React frontend.
 
-## What It Does
-
-- **Natural-language compliance auditing**: Ask "What GDPR gaps exist in the privacy policy?" and get a structured breakdown of missing obligations, severity levels, and article references.
-- **Multi-framework analysis**: A single query audits against multiple regulations simultaneously; the system auto-detects which frameworks are relevant from the query.
-- **Cross-document coverage discovery**: Ask "Which of these policies address HIPAA breach notification?" and get a yes/no matrix across all indexed company policies.
-- **Knowledge Graph reasoning**: Regulations are stored as a Neo4j graph (2,887 nodes, 5,922 edges, 71 communities). The pipeline uses 1-hop and multi-hop traversal to extract obligations and detect cross-regulation conflicts.
-- **Remediation guidance**: Every detected gap includes a concrete recommendation on what clause or disclosure to add.
-- **Live streaming pipeline**: The 8-node agent pipeline streams progress to the UI in real time via Server-Sent Events (SSE).
-- **Downloadable PDF reports**: Full audit results export as formatted PDF documents.
-- **Run history & trends**: All audit runs are tracked in MLflow; the dashboard shows gap trends over time.
+This is an assistive compliance review tool. It can surface possible gaps and remediation steps, but it does not replace legal review.
 
 ---
 
 ## Architecture
 
-### Agent Pipeline — 8 LangGraph Nodes
+```text
+Policy / Regulation PDFs
+        |
+        v
+Spark ingestion pipeline
+pipeline/spark_ingestion.py
+- extract text with PyMuPDF / pymupdf4llm
+- use Azure Document Intelligence OCR only for scanned PDFs
+- chunk text
+- create embeddings
+- upload chunks to Azure AI Search
+        |
+        v
+Azure AI Search
+- compliance-policies
+- compliance-regulations
 
-```
-User Query
-    │
-    ▼
-┌──────────────────┐
-│   doc_resolver   │  ← Identifies target policy document(s)
-└────────┬─────────┘   Classifies intent: single-doc audit / cross-doc
-         │             coverage discovery / clarification request
-         ▼
-┌────────────────────────┐
-│  jurisdiction_detector │  ← Auto-detects applicable regulations
-└──────────┬─────────────┘   (GDPR / CCPA / HIPAA / NIST) from query text
-           │
-           ▼
-┌──────────────────┐
-│   kg_retriever   │  ← Fetches obligations from Neo4j KG
-└────────┬─────────┘   + policy chunks from Azure AI Search
-         │
-         ▼
-┌──────────────────┐
-│   gap_analyzer   │  ← Compares policy text against regulatory obligations
-└────────┬─────────┘   per regulation, per document
-         │
-         ▼
-┌───────────────────────┐
-│   conflict_detector   │  ← Finds CONFLICTS_WITH / STRICTER_THAN edges in KG
-└──────────┬────────────┘   (e.g. GDPR 72h vs. HIPAA 60d breach notification)
-           │
-           ▼
-┌──────────────────┐
-│   risk_scorer    │  ← Scores gaps by severity: critical / high / medium / low
-└────────┬─────────┘   Groups gaps into thematic clusters
-         │
-         ▼
-┌──────────────────┐
-│   remediation    │  ← Generates "add this clause" recommendations per gap
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────────┐
-│  report_generator    │  ← Renders structured markdown report
-└──────────────────────┘   (gap analysis or coverage matrix, based on intent)
+Regulation PDFs
+        |
+        v
+Neo4j KG builder
+pipeline/kg_builder.py
+- extract regulation obligations and concepts
+- store regulation graph in Neo4j
+- store conflict/stricter-than relationships
+
+User
+        |
+        v
+React frontend -> FastAPI backend -> LangGraph compliance agent
+        |
+        +--> Azure AI Search: policy and regulation chunks
+        +--> Neo4j AuraDB: regulation obligations/conflicts
+        +--> Azure OpenAI-compatible LLM: gap analysis and remediation
 ```
 
-### Services & Infrastructure
-
-| Service | Purpose |
-|---------|---------|
-| **Azure AI Search** | Single vector index (`pdf-rag-index`) storing both regulation and policy chunks; hybrid keyword + semantic search with OData filters scoped by `paper_id` |
-| **Azure OpenAI (gpt-4o-mini)** | LLM for gap analysis, entity extraction, report generation, and remediation recommendations |
-| **Neo4j AuraDB** | Compliance knowledge graph — 2,887 obligation nodes, 5,922 edges, 38 cross-regulation conflict relationships (`CONFLICTS_WITH` / `STRICTER_THAN`) |
-| **MLflow** | Local experiment tracking (`mlruns/`); logs per-audit parameters, gap metrics, and full report artifacts. Can be pointed at an Azure ML workspace by setting `MLFLOW_TRACKING_URI` to the workspace MLflow URI |
-| **FastAPI + uvicorn** | REST + SSE streaming backend |
-| **React + Vite (TypeScript)** | Frontend dashboard |
-| **D3.js** | Interactive knowledge graph explorer |
-| **Apache Spark (local mode)** | Batch PDF ingestion — distributes extraction and chunking across CPU cores before uploading to Azure AI Search |
-| **pymupdf4llm** | PDF text extraction |
+Important: privacy policies are not stored as policy nodes in Neo4j. Neo4j is used for the regulation knowledge graph.
 
 ---
 
-## Project Structure
+## Main Runtime Flow
 
+```text
+User question + optional selected policy
+  -> FastAPI query endpoint
+  -> LangGraph workflow
+  -> resolve target policy
+  -> detect relevant frameworks
+  -> retrieve policy/regulation chunks from Azure AI Search
+  -> retrieve regulation obligations/conflicts from Neo4j
+  -> compare policy text against obligations
+  -> score gaps by severity
+  -> generate remediation checklist
+  -> return structured result to frontend
 ```
-PDF-RAG-AGENT/
-│
-├── agent/                          # LangGraph agent
-│   ├── compliance_nodes.py         # All 8 pipeline node implementations
-│   ├── graph.py                    # LangGraph StateGraph wiring
-│   └── state.py                    # AgentState TypedDict definition
-│
-├── app/                            # FastAPI backend
-│   ├── main.py
-│   ├── core/
-│   │   ├── config.py               # Environment config (Azure, Neo4j, MLflow)
-│   │   └── lifespan.py             # Startup: loads pipeline + agent
-│   ├── api/v1/endpoints/
-│   │   ├── query.py                # POST /query  +  POST /query/stream (SSE)
-│   │   ├── ingest.py               # POST /ingest — upload new policy PDFs
-│   │   ├── health.py               # GET /health/ready
-│   │   ├── history.py              # GET /history  GET /trends
-│   │   ├── conflicts.py            # GET /conflicts
-│   │   ├── graph.py                # GET /graph — Neo4j nodes/edges for D3
-│   │   ├── regulations.py          # GET /regulations
-│   │   └── report.py               # POST /report/pdf
-│   ├── models/schemas.py           # Pydantic request/response models
-│   └── services/rag_service.py     # Wraps agent; handles SSE streaming
-│
-├── pipeline/                       # Data ingestion & retrieval
-│   ├── kg_builder.py               # Builds Neo4j KG from regulation PDFs
-│   ├── compliance_retriever.py     # Azure AI Search + Neo4j queries
-│   ├── spark_ingestion.py          # Batch ingestion via Apache Spark (local[*])
-│   ├── extractor.py                # PDF text extraction (pymupdf4llm)
-│   ├── chunker.py                  # Token-based chunking strategy
-│   └── vectorstore.py              # Azure AI Search vectorstore wrapper
-│
-├── frontend/                       # React + Vite UI (TypeScript)
-│   ├── src/
-│   │   ├── pages/
-│   │   │   ├── Audit.tsx           # Main query + results UI (SSE streaming)
-│   │   │   ├── Dashboard.tsx       # Trends + cross-regulation conflicts
-│   │   │   ├── History.tsx         # Past audit runs (MLflow-backed)
-│   │   │   ├── GraphExplorer.tsx   # D3.js interactive KG visualizer
-│   │   │   └── Ingest.tsx          # Upload new policy PDFs
-│   │   └── lib/api.ts              # Typed API client (axios + fetch for SSE)
-│   ├── .env                        # VITE_API_URL=<backend-url>
-│   └── vite.config.ts              # Proxy config — routes /api/* to backend
-│
-├── mlops/
-│   └── compliance_tracker.py       # MLflow run logging wrapper
-│
-├── data/
-│   ├── regulations/                # GDPR, CCPA, HIPAA, NIST PDFs + KG cache
-│   └── policy_docs/pdfs/           # Indexed company privacy policy PDFs
-│
-├── tests/                          # pytest suite (unit + API + integration)
-├── config/default.json
-├── requirements.txt
-└── colab_eval.py                   # Pre-demo eval — 23 test queries, 7 categories
+
+Active LangGraph nodes:
+
+```text
+doc_resolver -> jurisdiction_detector -> kg_retriever -> gap_analyzer -> conflict_detector -> risk_scorer -> remediation -> report_generator
 ```
 
 ---
 
-## Setup & Running
+## Preparing Data Stores
 
-### Prerequisites
+Run these before using the app for audits.
 
-| Requirement | Notes |
-|-------------|-------|
-| Python 3.10+ | Backend runtime |
-| Node.js 18+ | Frontend |
-| Azure AI Search | One index — `pdf-rag-index` |
-| Azure OpenAI | `gpt-4o-mini` deployment |
-| Neo4j AuraDB | Free tier (1 GB) is sufficient |
+### 1. Build the regulation knowledge graph
 
-### Environment Variables
+```python
+from pipeline.kg_builder import ComplianceKGBuilder
 
-Create a `.env` file in the project root:
+builder = ComplianceKGBuilder()
+summary = builder.build_from_pdfs("data/regulations", clear_first=True)
+print(summary)
+```
+
+This reads regulation PDFs, extracts regulation concepts/obligations with the LLM graph transformer, and writes the regulation graph to Neo4j.
+
+### 2. Index regulation PDFs in Azure AI Search
+
+```bash
+python -m pipeline.spark_ingestion --input_dir data/regulations --strategy token --doc_type regulation --index compliance-regulations
+```
+
+### 3. Index policy PDFs in Azure AI Search
+
+```bash
+python -m pipeline.spark_ingestion --input_dir data/policies --strategy token --doc_type policy --index compliance-policies
+```
+
+The same `pipeline/spark_ingestion.py` file handles extraction, scanned-PDF OCR fallback, chunking, embeddings, and Azure AI Search upload.
+
+Policies can also be uploaded from the frontend Audit page through the embedded ingest component.
+
+---
+
+## Setup
+
+### Backend
+
+```bash
+pip install -r requirements.txt
+```
+
+Create a root `.env` file:
 
 ```env
-# Azure AI Search
-AZURE_SEARCH_ENDPOINT=https://<your-resource>.search.windows.net
-AZURE_SEARCH_KEY=<your-key>
-AZURE_SEARCH_INDEX_NAME=pdf-rag-index
+AZURE_SEARCH_ENDPOINT=https://<resource>.search.windows.net
+AZURE_SEARCH_KEY=<key>
+AZURE_SEARCH_REGULATIONS_INDEX=compliance-regulations
+AZURE_SEARCH_POLICIES_INDEX=compliance-policies
 
-# Azure OpenAI
-AZURE_OPENAI_ENDPOINT=https://<your-resource>.openai.azure.com/
-AZURE_OPENAI_KEY=<your-key>
+AZURE_OPENAI_ENDPOINT=https://<resource>.openai.azure.com/openai/v1
+AZURE_OPENAI_KEY=<key>
 AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini
-OPENAI_API_VERSION=2024-02-15-preview
 
-# Neo4j AuraDB
-NEO4J_URI=neo4j+s://<your-instance>.databases.neo4j.io
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=<your-password>
+AZURE_DOC_INTEL_ENDPOINT=https://<resource>.cognitiveservices.azure.com/
+AZURE_DOC_INTEL_KEY=<key>
+
+NEO4J_URI=neo4j+s://<instance>.databases.neo4j.io
+NEO4J_USERNAME=<username>
+NEO4J_PASSWORD=<password>
 NEO4J_DATABASE=neo4j
 
-# MLflow — local by default; set to Azure ML workspace URI for cloud tracking
-MLFLOW_TRACKING_URI=mlruns
+APPLICATIONINSIGHTS_CONNECTION_STRING=<optional>
+MLFLOW_TRACKING_URI=<optional>
 ```
 
-**Frontend** — create `frontend/.env`:
-```env
-VITE_API_URL=https://<your-backend-url>
-```
-
----
-
-### Step 1 — Build the Knowledge Graph *(one-time)*
-
-Parses regulation PDFs (GDPR, CCPA, HIPAA, NIST), extracts obligation nodes using `LLMGraphTransformer`, and stores conflict edges in Neo4j:
-
-```python
-pip install -r requirements.txt
-
-from pipeline.kg_builder import ComplianceKGBuilder
-result = ComplianceKGBuilder().build_from_pdfs("data/regulations/")
-# → {'graph_nodes': 2887, 'graph_edges': 5922, 'conflicts_in_graph': 38}
-```
-
-### Step 2 — Index Policy Documents *(one-time)*
-
-Uses Apache Spark in local mode to distribute PDF extraction and chunking, then batch-uploads to Azure AI Search:
-
-```python
-from pipeline.spark_ingestion import run_ingestion
-run_ingestion(input_dir="data/policy_docs/pdfs/", strategy="token", partitions=2)
-```
-
-To add a new policy later, use the **Ingest** page in the UI or `POST /api/v1/ingest`.
-
-### Step 3 — Start the Backend
+Run the backend:
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-Wait for the pipeline readiness message before sending queries. The agent loads Neo4j connections and Azure Search clients at startup.
-
-### Step 4 — Start the Frontend
+### Frontend
 
 ```bash
 cd frontend
-npm install       # first time only
-npm run dev       # → http://localhost:5173
+npm install
+npm run dev
 ```
 
-> Update `frontend/.env` with the correct backend URL and fully restart `npm run dev` whenever the backend URL changes — the Vite proxy reads it only at server start.
+Create `frontend/.env`:
+
+```env
+VITE_API_URL=http://localhost:8000
+```
+
+If using ngrok/Colab, set `VITE_API_URL` to the public backend URL and restart `npm run dev`.
 
 ---
 
-## Key Findings
+## Frontend Pages
 
-The system successfully processed privacy policy documents against GDPR, CCPA, HIPAA, and NIST regulatory frameworks, producing the following observations:
-
-- **Breach notification obligations** differed significantly between frameworks where GDPR requires supervisory authority notification within 72 hours while HIPAA allows up to 60 days. The knowledge graph captured this as a `STRICTER_THAN` conflict edge, which the `conflict_detector` node surfaces automatically.
-- **Right to erasure** (GDPR Art. 17) and medical record retention mandates (HIPAA) represent a structural tension that the system flags for healthcare data controllers operating across jurisdictions.
-- **NIST technical controls** (access control, encryption standards) were consistently underrepresented in policy documents, privacy policies rarely make binding commitments at the control level.
-- **Query intent classification** correctly distinguished audit queries (gap analysis mode) from coverage discovery queries (cross-document matrix mode), with clarification requests returned for ambiguous inputs.
+| Page | Purpose |
+|---|---|
+| Dashboard | Backend status and sample audit questions. |
+| Audit | Main audit UI, policy dropdown, streaming progress, gaps, remediation. |
+| History | Recent audit runs and browser-downloaded history report. |
 
 ---
 
-## Tech Stack
+## API Endpoints
 
-| Layer | Technology |
-|-------|-----------|
-| Agent orchestration | LangGraph (StateGraph) |
-| LLM | Azure OpenAI gpt-4o-mini |
-| Vector search | Azure AI Search |
-| Knowledge graph | Neo4j AuraDB + LangChain LLMGraphTransformer |
-| Backend framework | FastAPI + uvicorn |
-| Frontend | React 18, TypeScript, Vite, Tailwind CSS |
-| Graph visualization | D3.js (force-directed) |
-| ML experiment tracking | MLflow (local or Azure ML) |
-| Batch ingestion | Apache Spark (local mode) |
-| PDF extraction | pymupdf4llm |
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/v1/health` | Liveness check. |
+| `GET /api/v1/health/ready` | Readiness check. |
+| `POST /api/v1/query` | Run an audit query. |
+| `POST /api/v1/query/stream` | Run an audit with streaming progress. |
+| `POST /api/v1/ingest` | Upload policy PDFs. |
+| `GET /api/v1/policies` | List indexed policy documents. |
+| `GET /api/v1/history` | Read MLflow-backed audit history when configured. |
+| `GET /api/v1/conflicts` | Read regulation conflicts from Neo4j. |
+| `GET /api/v1/regulations` | List indexed regulations. |
+| `GET /api/v1/regulations/chunks` | Browse regulation chunks. |
+
+---
+
+## Tracking and Monitoring
+
+### MLflow / Azure MLflow
+
+The backend logs successful audit runs through `mlops/compliance_tracker.py`.
+
+Logged items include:
+
+| Type | Examples |
+|---|---|
+| Parameters | query, selected policy, jurisdictions |
+| Metrics | compliance score, risk score, gap counts, latency |
+| Artifacts | report markdown, gaps JSON, risk scores JSON |
+
+For Azure MLflow, set:
+
+```env
+MLFLOW_TRACKING_URI=azureml://<region>.api.azureml.ms/mlflow/v2.0/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.MachineLearningServices/workspaces/<workspace-name>
+```
+
+Then restart the backend and run an audit. The experiment name is:
+
+```text
+privacy-compliance-audits
+```
+
+### Application Insights
+
+Application Insights is used for runtime monitoring, not experiment artifacts.
+
+Set:
+
+```env
+APPLICATIONINSIGHTS_CONNECTION_STRING=<your-application-insights-connection-string>
+```
+
+Then restart the backend and run an audit. In Application Insights, check Logs or Transaction Search for events such as:
+
+```text
+query_received
+node_jurisdiction_detector
+node_gap_analyzer
+node_risk_scorer
+query_completed
+query_error
+```
+
+---
+
+## Repository Structure
+
+```text
+agent/                     LangGraph compliance workflow
+app/                       FastAPI backend
+frontend/                  React + Vite frontend
+mlops/                     MLflow tracking helper
+pipeline/kg_builder.py     Neo4j regulation KG builder
+pipeline/spark_ingestion.py Spark PDF ingestion, extraction, chunking, embeddings, Azure Search upload
+data/regulations/          Regulation PDFs
+data/policies/             Policy PDFs
+```
+
+---
+
+## Limitations
+
+- This system provides compliance assistance, not legal advice.
+- Policy filename changes do not anonymize company names inside PDF text.
+- If multiple policies exist and no policy is selected, the system may ask for clarification.
+- MLflow and Application Insights are optional observability layers.

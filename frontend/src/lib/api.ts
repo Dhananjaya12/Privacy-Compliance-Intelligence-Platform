@@ -32,6 +32,64 @@ api.interceptors.response.use(
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+
+const KNOWN_POLICY_ALIASES: Record<string, string> = {
+  'microsoft_privacy_policy.pdf': 'privacy_policy_1.pdf',
+  'meta_privacy_policy.pdf': 'privacy_policy_2.pdf',
+  'stripe_privacy_policy.pdf': 'privacy_policy_3.pdf',
+  'uber_privacy_policy.pdf': 'privacy_policy_4.pdf',
+  'salesforce_privacy_policy.pdf': 'privacy_policy_5.pdf',
+  'netflix_privacy_policy.pdf': 'privacy_policy_6.pdf',
+  'google_privacy_policy_latest.pdf': 'privacy_policy_7.pdf',
+  'zoom_privacy_policy.pdf': 'privacy_policy_8.pdf',
+}
+
+const COMPANY_NAME_REPLACEMENTS: [RegExp, string][] = [
+  [/microsoft/gi, 'Policy 1'],
+  [/meta/gi, 'Policy 2'],
+  [/stripe/gi, 'Policy 3'],
+  [/uber/gi, 'Policy 4'],
+  [/salesforce/gi, 'Policy 5'],
+  [/netflix/gi, 'Policy 6'],
+  [/google/gi, 'Policy 7'],
+  [/zoom/gi, 'Policy 8'],
+]
+
+function fallbackPolicyAlias(filename: string): string {
+  let hash = 0
+  for (let i = 0; i < filename.length; i += 1) {
+    hash = ((hash << 5) - hash + filename.charCodeAt(i)) | 0
+  }
+  return `privacy_policy_${Math.abs(hash % 900) + 100}.pdf`
+}
+
+export const anonymizePolicyName = (filename?: string | null): string => {
+  if (!filename) return 'privacy_policy.pdf'
+  const clean = filename.split(/[\\/]/).pop() || filename
+  const key = clean.toLowerCase()
+  if (KNOWN_POLICY_ALIASES[key]) return KNOWN_POLICY_ALIASES[key]
+  if (key.includes('privacy') || key.endsWith('.pdf')) return fallbackPolicyAlias(clean)
+  return clean
+}
+
+export const anonymizeText = (value?: string | null): string => {
+  if (!value) return ''
+  let output = value
+  Object.entries(KNOWN_POLICY_ALIASES).forEach(([realName, alias]) => {
+    const stem = realName.replace(/\.pdf$/i, '')
+    const looseStem = stem.replace(/[_-]/g, '[ _-]')
+    output = output.replace(new RegExp(realName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), alias)
+    output = output.replace(new RegExp(looseStem, 'gi'), alias.replace(/\.pdf$/i, ''))
+  })
+  COMPANY_NAME_REPLACEMENTS.forEach(([pattern, alias]) => {
+    output = output.replace(pattern, alias)
+  })
+  return output
+}
+
+export const anonymizePolicyList = (filenames: string[]): { real: string; alias: string }[] =>
+  filenames.map(real => ({ real, alias: anonymizePolicyName(real) }))
+
 export interface SourceChunk {
   paper_id: string
   page: number
@@ -131,6 +189,53 @@ export interface HistoryRun {
   total_conflicts: number | null
   jurisdictions: string | null
   start_time: string
+  answer?: string
+  query_intent?: 'audit' | 'coverage'
+  compliance?: ComplianceDetail | null
+}
+
+
+const LOCAL_HISTORY_KEY = 'complianceAuditHistory'
+
+export const loadLocalHistory = (): HistoryRun[] => {
+  try {
+    const raw = window.localStorage.getItem(LOCAL_HISTORY_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+export const saveLocalHistory = (
+  question: string,
+  response: QueryResponse,
+  selectedPolicy?: string,
+): void => {
+  const compliance = response.compliance
+  const item: HistoryRun = {
+    run_id: `local-${Date.now()}`,
+    policy_name: selectedPolicy || compliance?.documents?.[0] || null,
+    query: response.query || question,
+    compliance_score: compliance?.compliance_score ?? null,
+    overall_risk: compliance?.overall_risk ?? null,
+    total_gaps: compliance?.gaps?.length ?? null,
+    total_conflicts: compliance?.conflicts?.length ?? null,
+    jurisdictions: compliance?.jurisdictions?.join(', ') || null,
+    start_time: String(Date.now()),
+    answer: response.answer,
+    query_intent: response.query_intent,
+    compliance,
+  }
+
+  const existing = loadLocalHistory()
+  const next = [item, ...existing].slice(0, 100)
+  window.localStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(next))
+}
+
+export const clearLocalHistory = (): void => {
+  window.localStorage.removeItem(LOCAL_HISTORY_KEY)
 }
 
 export interface TrendPoint {

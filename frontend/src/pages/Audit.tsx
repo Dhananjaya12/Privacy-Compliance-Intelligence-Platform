@@ -1,11 +1,11 @@
 // src/pages/Audit.tsx
 import { useEffect, useState } from 'react'
 import {
-  queryStreamAPI, listPoliciesAPI, downloadReportPDF,
-  QueryResponse, QueryProgressEvent, Gap, GapGroup,
+  queryStreamAPI, listPoliciesAPI,
+  QueryResponse, QueryProgressEvent, Gap, GapGroup, saveLocalHistory, anonymizePolicyName, anonymizeText,
 } from '../lib/api'
 import Ingest from './Ingest'
-import { Search, AlertTriangle, Download, Lightbulb, CheckCircle, Circle, UploadCloud, ChevronDown, ChevronUp } from 'lucide-react'
+import { Search, AlertTriangle, Lightbulb, CheckCircle, Circle, UploadCloud, ChevronDown, ChevronUp } from 'lucide-react'
 
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low'] as const
 type Severity = typeof SEVERITY_ORDER[number]
@@ -25,7 +25,7 @@ const PIPELINE_STEPS: { node: string; label: string }[] = [
 
 
 const SAMPLE_QUESTIONS = [
-  'Does the Google policy comply with GDPR Article 17 right to erasure?',
+  'Does this selected policy comply with GDPR Article 17 right to erasure?',
   'What CCPA rights are missing from this privacy policy?',
   'Which policies address HIPAA breach notification timelines?',
   'Are data retention schedules documented per NIST requirements?',
@@ -40,8 +40,6 @@ export default function Audit() {
   const [error, setError]       = useState<string | null>(null)
   const [resolvedThemes, setResolvedThemes] = useState<Set<string>>(new Set())
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set())
-  const [pdfLoading, setPdfLoading] = useState(false)
-  const [pdfError, setPdfError]     = useState<string | null>(null)
   const [showIngest, setShowIngest] = useState(false)
 
   useEffect(() => {
@@ -65,6 +63,7 @@ export default function Audit() {
         setCompletedSteps(prev => new Set(prev).add(event.node))
       })
       setResult(res)
+      saveLocalHistory(q, res, target || undefined)
     } catch (e: any) {
       setError(e?.response?.data?.detail || e?.message || 'Request failed. Is the server running?')
     } finally {
@@ -107,7 +106,7 @@ export default function Audit() {
       <div className="query-bar">
         <input
           className="query-input"
-          placeholder="e.g. Does the Google policy comply with GDPR Article 17?"
+          placeholder="e.g. Does this selected policy comply with GDPR Article 17?"
           value={query}
           onChange={e => setQuery(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && run(query)}
@@ -115,7 +114,7 @@ export default function Audit() {
         <select className="btn btn-ghost" value={target} onChange={e => setTarget(e.target.value)}
           style={{ maxWidth: 220 }}>
           <option value="">Auto-detect document</option>
-          {policies.map(p => <option key={p} value={p}>{p}</option>)}
+          {policies.map(p => <option key={p} value={p}>{anonymizePolicyName(p)}</option>)}
         </select>
         <button className="btn btn-primary" onClick={() => run(query)} disabled={loading || !query.trim()}>
           {loading ? <span className="spinner" /> : <Search size={14} />}
@@ -172,7 +171,7 @@ export default function Audit() {
       {result?.clarification && (
         <div className="card" style={{ borderColor: 'var(--medium)' }}>
           <div className="card-title">Clarification needed</div>
-          <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>{result.clarification}</div>
+          <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>{anonymizeText(result.clarification)}</div>
         </div>
       )}
 
@@ -181,27 +180,9 @@ export default function Audit() {
 
           {/* Audit summary (plain-English, not a "report" dump) */}
           <div className="card">
-            <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>{result.query_intent === 'coverage' ? 'Coverage Summary' : 'Audit Summary'}</span>
-              <button className="btn btn-ghost" style={{ fontSize: 12 }} disabled={pdfLoading}
-                onClick={async () => {
-                  setPdfError(null); setPdfLoading(true)
-                  try {
-                    await downloadReportPDF(result.answer, `audit_${(c.documents[0] || 'report').replace(/\.[^.]+$/, '')}.pdf`)
-                  } catch (e: any) {
-                    setPdfError(e?.message || 'PDF download failed.')
-                  } finally {
-                    setPdfLoading(false)
-                  }
-                }}>
-                {pdfLoading ? <span className="spinner" /> : <Download size={12} />} Download full report (PDF)
-              </button>
+            <div className="card-title">
+              {result.query_intent === 'coverage' ? 'Coverage Summary' : 'Audit Summary'}
             </div>
-            {pdfError && (
-              <div style={{ fontSize: 12, color: 'var(--critical)', marginBottom: 8 }}>
-                {pdfError}
-              </div>
-            )}
             <div style={{ fontSize: 13, color: 'var(--text-dim)', lineHeight: 1.7 }}>
               {result.query_intent === 'coverage' ? (
                 <>
@@ -217,7 +198,7 @@ export default function Audit() {
                 </>
               ) : (
                 <>
-                  Audited <strong>{c.documents.join(', ') || 'the policy'}</strong> against{' '}
+                  Audited <strong>{c.documents.map(anonymizePolicyName).join(', ') || 'the policy'}</strong> against{' '}
                   <strong>{c.jurisdictions.join(', ') || 'no detected frameworks'}</strong>.
                   {c.gaps.length > 0 ? (
                     <>
@@ -255,7 +236,7 @@ export default function Audit() {
                     return (
                       <div key={doc} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                        <strong style={{ color: 'var(--text)' }}>{doc.replace(/\.[^.]+$/, '')}</strong>
+                        <strong style={{ color: 'var(--text)' }}>{anonymizePolicyName(doc).replace(/\.[^.]+$/, '')}</strong>
                         <span style={{ color }}>{label}</span>
                       </div>
                     )
@@ -291,7 +272,7 @@ export default function Audit() {
             const uniqueDocs = [...new Set(sortedGaps.map(g => g.document).filter(Boolean))]
             const multiDoc = uniqueDocs.length > 1
             const docLabel = (doc?: string) => doc
-              ? doc.replace(/\.[^.]+$/, '').replace(/_/g, ' ').slice(0, 30)
+              ? anonymizePolicyName(doc).replace(/\.[^.]+$/, '').replace(/_/g, ' ').slice(0, 30)
               : '—'
             return (
               <div className="card">
@@ -331,7 +312,7 @@ export default function Audit() {
                         <td><span className={`badge badge-${gap.severity}`}>{gap.severity}</span></td>
                         <td><span className="chip">{gap.regulation}</span></td>
                         <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{gap.ob_type}</td>
-                        <td style={{ maxWidth: 400 }}>{gap.description}</td>
+                        <td style={{ maxWidth: 400 }}>{anonymizeText(gap.description)}</td>
                         <td style={{ color: 'var(--text-muted)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>{gap.article || '—'}</td>
                       </tr>
                     ))}
@@ -376,7 +357,7 @@ export default function Audit() {
                         </div>
                         {group.remediation?.recommendation && (
                           <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>
-                            {group.remediation.recommendation}
+                            {anonymizeText(group.remediation.recommendation)}
                           </div>
                         )}
                       </div>
