@@ -1,8 +1,8 @@
 # Privacy Compliance Intelligence Platform
 
-A compliance-focused RAG application for auditing privacy policy PDFs against GDPR, CCPA, HIPAA, and NIST requirements.
+A compliance-focused RAG application for auditing privacy policy PDFs against regulatory frameworks such as GDPR, CCPA, HIPAA, and NIST.
 
-The project combines Spark-based PDF ingestion, Azure AI Search retrieval, a Neo4j regulation knowledge graph, an Azure OpenAI-compatible LLM, a LangGraph compliance workflow, and a React frontend.
+The project combines Spark-based PDF ingestion, Azure AI Search retrieval, a Neo4j regulatory-framework knowledge graph, an Azure OpenAI-compatible LLM, a LangGraph compliance workflow, and a React frontend.
 
 This is an assistive compliance review tool. It can surface possible gaps and remediation steps, but it does not replace legal review.
 
@@ -11,7 +11,7 @@ This is an assistive compliance review tool. It can surface possible gaps and re
 ## Architecture
 
 ```text
-Policy / Regulation PDFs
+Policy / Regulatory-framework PDFs
         |
         v
 Spark ingestion pipeline
@@ -27,26 +27,26 @@ Azure AI Search
 - compliance-policies
 - compliance-regulations
 
-Regulation PDFs
+Regulatory-framework PDFs
         |
         v
 Neo4j KG builder
 pipeline/kg_builder.py
-- extract regulation obligations and concepts
-- store regulation graph in Neo4j
-- store conflict/stricter-than relationships
+- extract framework obligations and concepts
+- store framework graph in Neo4j
+- store connected obligation/conflict/stricter-than relationships
 
 User
         |
         v
 React frontend -> FastAPI backend -> LangGraph compliance agent
         |
-        +--> Azure AI Search: policy and regulation chunks
-        +--> Neo4j AuraDB: regulation obligations/conflicts
+        +--> Azure AI Search: policy and framework chunks
+        +--> Neo4j AuraDB: connected framework obligations and conflicts
         +--> Azure OpenAI-compatible LLM: gap analysis and remediation
 ```
 
-Important: privacy policies are not stored as policy nodes in Neo4j. Neo4j is used for the regulation knowledge graph.
+Important: privacy policies are not stored as policy nodes in Neo4j. Neo4j is used for the regulatory-framework knowledge graph.
 
 ---
 
@@ -57,9 +57,9 @@ User question + optional selected policy
   -> FastAPI query endpoint
   -> LangGraph workflow
   -> resolve target policy
-  -> detect relevant frameworks
-  -> retrieve policy/regulation chunks from Azure AI Search
-  -> retrieve regulation obligations/conflicts from Neo4j
+  -> detect relevant regulatory frameworks
+  -> retrieve policy/framework chunks from Azure AI Search
+  -> retrieve connected framework obligations/conflicts from Neo4j
   -> compare policy text against obligations
   -> score gaps by severity
   -> generate remediation checklist
@@ -72,13 +72,40 @@ Active LangGraph nodes:
 doc_resolver -> jurisdiction_detector -> kg_retriever -> gap_analyzer -> conflict_detector -> risk_scorer -> remediation -> report_generator
 ```
 
+### How the audit is implemented
+
+This section maps the audit behavior to the actual files and functions in the project.
+
+| Step | Implementation | What happens in code |
+|---|---|---|
+| PDF ingestion | `pipeline/spark_ingestion.py` -> `run_ingestion()` | Scans the input folder, distributes PDFs across Spark partitions, extracts text, chunks it, embeds it, and uploads documents to the selected Azure AI Search index. |
+| Text extraction | `pipeline/spark_ingestion.py` -> `extract_text()` | Uses PyMuPDF / `pymupdf4llm` for text PDFs. If `is_scanned()` finds very little embedded text, it falls back to Azure Document Intelligence OCR. |
+| Chunking | `pipeline/spark_ingestion.py` -> `chunk_text()` | Uses token chunking by default; semantic chunking is available through `SemanticChunker`. Each chunk keeps metadata such as `paper_id`, `doc_type`, `regulation`, `page`, and `chunk_id`. |
+| Framework KG build | `pipeline/kg_builder.py` -> `ComplianceKGBuilder.build_from_pdfs()` | Reads framework PDFs from `data/regulations`, splits them into article/section chunks, runs `LLMGraphTransformer`, and writes graph documents to Neo4j. |
+| KG node/edge schema | `pipeline/kg_builder.py` -> `ALLOWED_NODES`, `ALLOWED_RELATIONSHIPS` | Nodes include `Regulation`, `Article`, `Obligation`, `Right`, `Entity`, `Concept`, `Penalty`, and `Timeframe`. Edges include `REQUIRES`, `GRANTS`, `REFERENCES`, `MAPS_TO`, `PART_OF`, `DEFINES`, `APPLIES_TO`, `IMPOSES`, `CONFLICTS_WITH`, and `STRICTER_THAN`. |
+| Value conflict extraction | `pipeline/kg_builder.py` -> `_extract_value_conflicts()` | Runs a dedicated LLM pass over framework text and writes concrete `CONFLICTS_WITH` / `STRICTER_THAN` edges using Cypher. Stored properties include `concept`, `value_a`, `value_b`, `unit`, `description`, and `source_quote`. |
+| Policy selection | `agent/compliance_nodes.py` -> `doc_resolver_node()` | Uses the frontend dropdown value first. If absent, it tries filename/query matching; if multiple policies are possible, it returns a clarification response. |
+| Framework detection | `agent/compliance_nodes.py` -> `jurisdiction_detector_node()` | Detects the applicable regulatory frameworks from the question and available context. These names are then used to scope obligations, conflicts, and scoring. |
+| Evidence retrieval | `agent/compliance_nodes.py` -> `kg_retriever_node()` and `pipeline/compliance_retriever.py` -> `_azure_search()` | Retrieves policy chunks from Azure AI Search with a filter like `doc_type eq 'policy' and paper_id eq '<selected.pdf>'`. It also retrieves framework chunks from the framework index. |
+| KG context retrieval | `pipeline/compliance_retriever.py` -> `multi_hop()` | Extracts important terms from the retrieved text, then asks Neo4j for nearby connected framework facts. In plain English: if the query mentions breach notification, the graph helps pull related duties, timeframes, rights, penalties, and framework sections connected to that concept. |
+| Obligation structuring | `agent/compliance_nodes.py` -> `_triples_to_obligations()` | Converts Neo4j relationship results into simple obligation records with framework, obligation type, source, and text fields. Keyword rules classify obligations such as breach notification, data subject rights, access control, encryption, retention, consent, and lawful basis. |
+| Gap analysis | `agent/compliance_nodes.py` -> `gap_analyzer_node()` and `_analyze_gaps_with_llm()` | Sends the selected policy text plus structured obligations to the LLM in batches. The LLM returns JSON gaps with severity, framework, obligation ID, theme, evidence, and missing/weak policy language. |
+| Conflict filtering | `agent/compliance_nodes.py` -> `conflict_detector_node()` | Reads `CONFLICTS_WITH` and `STRICTER_THAN` edges from Neo4j and keeps only conflicts relevant to the detected frameworks for that audit. |
+| Priority scoring | `agent/compliance_nodes.py` -> `risk_scorer_node()` | Converts gaps into a simple prioritization score for the UI/report. Severity weights are `critical=10`, `high=7.5`, `medium=5`, `low=2.5`, `info=1`. Framework weights are `GDPR=0.35`, `HIPAA=0.30`, `CCPA=0.20`, `NIST=0.15`. The displayed compliance score is calculated by `risk_to_compliance() = 100 - risk * 10`, clamped to 0-100. This is not a legal certification score; it is a way to rank and summarize findings. |
+| Remediation | `agent/compliance_nodes.py` -> `remediation_node()` and `_generate_remediations()` | Groups gaps by closed-vocabulary themes and asks the LLM for one concrete checklist action per theme. The final report renders these as remediation checklist items. |
+| Runtime telemetry | `app/core/telemetry.py` and `agent/compliance_nodes.py` | Emits visible console logs and Application Insights traces for `query_received`, `node_jurisdiction_detector`, `node_gap_analyzer`, `node_risk_scorer`, and `query_completed`. |
+
+The important implementation detail is that the app does not simply ask an LLM to judge a policy from scratch. It first retrieves policy evidence from Azure AI Search, uses Neo4j to pull connected framework facts around the audit topic, converts those graph results into structured obligations, and then asks the LLM to compare the policy language against those obligations.
+
+KG conflicts are value-level framework differences, for example different deadlines, thresholds, or limits for the same obligation. The conflict extraction focuses on breach notification deadlines, deletion/erasure response deadlines, data subject access deadlines, minor consent age thresholds, retention limits, and opt-out response deadlines.
+
 ---
 
 ## Preparing Data Stores
 
 Run these before using the app for audits.
 
-### 1. Build the regulation knowledge graph
+### 1. Build the regulatory-framework knowledge graph
 
 ```python
 from pipeline.kg_builder import ComplianceKGBuilder
@@ -88,9 +115,9 @@ summary = builder.build_from_pdfs("data/regulations", clear_first=True)
 print(summary)
 ```
 
-This reads regulation PDFs, extracts regulation concepts/obligations with the LLM graph transformer, and writes the regulation graph to Neo4j.
+This reads framework PDFs, extracts framework concepts/obligations with the LLM graph transformer, and writes the framework graph to Neo4j.
 
-### 2. Index regulation PDFs in Azure AI Search
+### 2. Index regulatory-framework PDFs in Azure AI Search
 
 ```bash
 python -m pipeline.spark_ingestion --input_dir data/regulations --strategy token --doc_type regulation --index compliance-regulations
@@ -185,9 +212,9 @@ If using ngrok/Colab, set `VITE_API_URL` to the public backend URL and restart `
 | `POST /api/v1/ingest` | Upload policy PDFs. |
 | `GET /api/v1/policies` | List indexed policy documents. |
 | `GET /api/v1/history` | Read MLflow-backed audit history when configured. |
-| `GET /api/v1/conflicts` | Read regulation conflicts from Neo4j. |
-| `GET /api/v1/regulations` | List indexed regulations. |
-| `GET /api/v1/regulations/chunks` | Browse regulation chunks. |
+| `GET /api/v1/conflicts` | Read framework conflicts from Neo4j. |
+| `GET /api/v1/regulations` | List indexed regulatory frameworks. |
+| `GET /api/v1/regulations/chunks` | Browse regulatory-framework chunks. |
 
 ---
 
@@ -247,9 +274,9 @@ agent/                     LangGraph compliance workflow
 app/                       FastAPI backend
 frontend/                  React + Vite frontend
 mlops/                     MLflow tracking helper
-pipeline/kg_builder.py     Neo4j regulation KG builder
+pipeline/kg_builder.py     Neo4j regulatory-framework KG builder
 pipeline/spark_ingestion.py Spark PDF ingestion, extraction, chunking, embeddings, Azure Search upload
-data/regulations/          Regulation PDFs
+data/regulations/          Regulatory-framework PDFs
 data/policies/             Policy PDFs
 ```
 
