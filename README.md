@@ -6,6 +6,8 @@ The project combines Spark-based PDF ingestion, Azure AI Search retrieval, a Neo
 
 This is an assistive compliance review tool. It can surface possible gaps and remediation steps, but it does not replace legal review.
 
+**Demo video:** [Privacy-Compliance-Intelligence-Platform Demo Walkthrough.mp4](https://drive.google.com/file/d/1fJ116xLkkeYu2BC7wDhsTNAe9oC7oX2M/view?usp=sharing)
+
 ---
 
 ## Architecture
